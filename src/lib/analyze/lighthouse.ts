@@ -1,10 +1,13 @@
-import lighthouse from "lighthouse";
 import { launch as launchChrome } from "chrome-launcher";
 import type { LighthouseScores } from "./types";
 
 export async function runLighthouse(
   url: string
 ): Promise<{ scores: LighthouseScores; summary: string[] }> {
+  // Import inside the function so missing optional assets don't crash the whole module evaluation.
+  // This also helps us debug stages in server logs.
+  const { default: lighthouse } = await import("lighthouse");
+
   const chrome = await launchChrome({
     chromeFlags: ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage"],
   });

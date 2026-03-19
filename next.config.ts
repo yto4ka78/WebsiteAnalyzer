@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
       "node_modules/lighthouse/flow-report/assets/*",
       "node_modules/lighthouse/flow-report/assets/**/*",
       "node_modules/lighthouse/report/**",
+      // Generator expects dist/report/flow.js via ../../dist/report/flow.js
+      "node_modules/lighthouse/dist/report/**",
     ],
   },
 };
