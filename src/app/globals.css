@@ -24,3 +24,103 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ─── Print-only brand (hidden on screen, shown once in print) ── */
+.print-only-brand {
+  display: none;
+}
+
+/* ─── Print / Save as PDF ─────────────────────────────────────── */
+@media print {
+  /* Force exact colors */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* FIX 2: Kill the fixed navbar completely so it doesn't repeat on every page.
+     position:static must come before display:none to beat Chrome's fixed-element
+     repeat behaviour. */
+  header {
+    position: static !important;
+    visibility: hidden !important;
+    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  nav {
+    display: none !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* FIX 2: Print-only brand appears exactly once at top of report */
+  .print-only-brand {
+    display: flex !important;
+  }
+
+  body {
+    background: #0a0a0a !important;
+    color: #ededed !important;
+    font-size: 11pt;
+  }
+
+  /* Remove page top padding — navbar is hidden */
+  .pt-14 {
+    padding-top: 0 !important;
+  }
+
+  main {
+    padding-top: 0.3cm !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Report container: full width */
+  #report-printable {
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  #report-printable > * + * {
+    margin-top: 0.5cm;
+  }
+
+  /* FIX 1: Allow sections to flow across page breaks naturally.
+     Locking break-inside on the whole <section> causes Chrome to render an
+     empty card shell on page 1 and push the <dl> content to page 2.
+     Instead we only lock individual rows so no single row is torn in half. */
+  #report-printable section,
+  #report-printable > div {
+    border-radius: 0.4cm;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  /* Keep headings attached to the first row that follows them */
+  #report-printable section h2,
+  #report-printable > div h2 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* FIX 1: Prevent individual dl rows from splitting mid-row */
+  #report-printable dl > div {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Issue cards: avoid splitting */
+  .space-y-3 > div {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    margin-bottom: 0.25cm;
+  }
+
+  @page {
+    margin: 1.5cm 1.8cm;
+    size: A4;
+  }
+}

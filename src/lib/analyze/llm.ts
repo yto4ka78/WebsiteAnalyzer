@@ -1,7 +1,13 @@
 import OpenAI from "openai";
 import type { Issue, PageSignals } from "./types";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const apiKey = process.env.OPENAI_API_KEY;
+if (!apiKey?.trim()) {
+  throw new Error(
+    "OPENAI_API_KEY is not set. Add it to .env.local (see .env.example) so LLM analysis runs and usage appears in https://platform.openai.com/settings/organization/usage"
+  );
+}
+const client = new OpenAI({ apiKey });
 
 export async function llmIssues(args: {
   page: PageSignals;
