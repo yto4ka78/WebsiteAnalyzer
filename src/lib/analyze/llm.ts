@@ -1,13 +1,10 @@
 import OpenAI from "openai";
 import type { Issue, PageSignals } from "./types";
 
-const apiKey = process.env.OPENAI_API_KEY;
-if (!apiKey?.trim()) {
-  throw new Error(
-    "OPENAI_API_KEY is not set. Add it to .env.local (see .env.example) so LLM analysis runs and usage appears in https://platform.openai.com/settings/organization/usage"
-  );
-}
-const client = new OpenAI({ apiKey });
+const apiKey = process.env.OPENAI_API_KEY?.trim();
+// Important: do NOT throw at module-evaluation time.
+// On serverless/standalone this can crash the whole handler on import.
+const client = apiKey ? new OpenAI({ apiKey }) : null;
 
 export async function llmIssues(args: {
   page: PageSignals;
@@ -21,6 +18,13 @@ export async function llmIssues(args: {
   issues: Issue[];
   recommendations: { quickWins: string[]; nextSteps: string[] };
 }> {
+  if (!client) {
+    throw Object.assign(
+      new Error("Problem with server setup. Contact support."),
+      { status: 500 },
+    );
+  }
+
   const { page, lighthouseScores } = args;
 
   const prompt = {
@@ -70,7 +74,10 @@ export async function llmIssues(args: {
   const text = resp.choices[0]?.message?.content ?? "";
 
   // Strip markdown code fences if present
-  const cleaned = text.replace(/^```(?:json)?\n?/i, "").replace(/\n?```$/i, "").trim();
+  const cleaned = text
+    .replace(/^```(?:json)?\n?/i, "")
+    .replace(/\n?```$/i, "")
+    .trim();
 
   try {
     const json = JSON.parse(cleaned);
