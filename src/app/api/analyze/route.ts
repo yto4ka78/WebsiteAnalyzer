@@ -15,7 +15,22 @@ const QUOTA_EXCEEDED_MESSAGE =
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    console.log("[api/analyze] called");
+
+    const openaiKeyPresent = Boolean(process.env.OPENAI_API_KEY?.trim());
+    console.log(`[api/analyze] OPENAI_API_KEY present: ${openaiKeyPresent}`);
+
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch (e) {
+      console.error("[api/analyze] req.json() failed", e);
+      return NextResponse.json(
+        { ok: false, error: "Invalid JSON body" } satisfies AnalyzeError,
+        { status: 400 }
+      );
+    }
+
     const parsed = analyzeSchema.safeParse(body);
     if (!parsed.success) {
       const err: AnalyzeError = {
@@ -28,10 +43,27 @@ export async function POST(req: Request) {
     const inputUrl = parsed.data.url;
 
     const result = await queue.add(async () => {
-      const page = await fetchPageSignals(inputUrl);
-      const lh = await runLighthouse(page.finalUrl);
+      let page;
+      try {
+        console.log("[api/analyze] stage fetchPageSignals");
+        page = await fetchPageSignals(inputUrl);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Unknown error";
+        throw new Error(`stage:fetchPageSignals:${message}`);
+      }
+
+      let lh;
+      try {
+        console.log("[api/analyze] stage runLighthouse");
+        lh = await runLighthouse(page.finalUrl);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Unknown error";
+        throw new Error(`stage:runLighthouse:${message}`);
+      }
+
       let llm;
       try {
+        console.log("[api/analyze] stage llmIssues");
         llm = await llmIssues({ page, lighthouseScores: lh.scores });
       } catch (e) {
         const status = (e as { status?: number })?.status;
@@ -43,7 +75,12 @@ export async function POST(req: Request) {
         if (isQuotaExceeded) {
           throw Object.assign(new Error(QUOTA_EXCEEDED_MESSAGE), { status: 429 });
         }
-        throw e;
+
+        // Keep original message, but tag stage to speed up production debugging.
+        if (e instanceof Error) {
+          throw new Error(`stage:llmIssues:${e.message}`);
+        }
+        throw new Error(`stage:llmIssues:Unknown error`);
       }
 
       const res: AnalyzeResponse = {
@@ -66,6 +103,7 @@ export async function POST(req: Request) {
   } catch (e) {
     const status = (e as { status?: number })?.status;
     const message = e instanceof Error ? e.message : "Unknown error";
+    console.error("[api/analyze] handler error", { status, message });
     const isQuotaExceeded =
       status === 429 ||
       message.includes("429") ||
