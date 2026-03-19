@@ -1,7 +1,20 @@
 import { chromium } from "playwright";
+import path from "path";
 import type { PageSignals } from "./types";
 
 export async function fetchPageSignals(url: string): Promise<PageSignals> {
+  // In serverless environments (Netlify), the default Playwright browser cache
+  // path (e.g. ~/.cache/ms-playwright) may not exist at runtime.
+  // We force Playwright to use a path inside the deployed bundle.
+  if (!process.env.PLAYWRIGHT_BROWSERS_PATH?.trim()) {
+    process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(
+      process.cwd(),
+      "node_modules",
+      ".cache",
+      "ms-playwright"
+    );
+  }
+
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({
     userAgent: "Mozilla/5.0 (compatible; WebsiteAnalyzer/1.0)",

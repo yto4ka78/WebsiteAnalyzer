@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
       "node_modules/lighthouse/report/**",
       // Generator expects dist/report/flow.js via ../../dist/report/flow.js
       "node_modules/lighthouse/dist/report/**",
+      // Playwright browser executables (downloaded by `npx playwright install chromium`)
+      // are used from PLAYWRIGHT_BROWSERS_PATH at runtime.
+      "node_modules/.cache/ms-playwright/**",
     ],
   },
 };
