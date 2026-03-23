@@ -45,17 +45,26 @@ export async function POST(req: Request) {
     const result = await queue.add(async () => {
       let page;
       try {
-        console.log("[api/analyze] stage fetchPageSignals");
+        console.log("[api/analyze] stage fetchPageSignals (desktop)");
         page = await fetchPageSignals(inputUrl);
       } catch (e) {
         const message = e instanceof Error ? e.message : "Unknown error";
         throw new Error(`stage:fetchPageSignals:${message}`);
       }
 
-      let lh;
+      // Run lighthouse and mobile fetch in parallel — both need the final URL
+      let lh: Awaited<ReturnType<typeof runLighthouse>>;
+      let mobilePage: Awaited<ReturnType<typeof fetchPageSignals>>;
       try {
-        console.log("[api/analyze] stage runLighthouse");
-        lh = await runLighthouse(page.finalUrl);
+        console.log("[api/analyze] stage runLighthouse + fetchPageSignals (mobile) in parallel");
+        [lh, mobilePage] = await Promise.all([
+          runLighthouse(page.finalUrl),
+          fetchPageSignals(page.finalUrl, { mobile: true }).catch((e) => {
+            // Mobile fetch failure is non-fatal — fall back to desktop signals
+            console.warn("[api/analyze] mobile fetchPageSignals failed, using desktop signals", e);
+            return { ...page, isMobile: true };
+          }),
+        ]);
       } catch (e) {
         const message = e instanceof Error ? e.message : "Unknown error";
         throw new Error(`stage:runLighthouse:${message}`);
@@ -64,7 +73,7 @@ export async function POST(req: Request) {
       let llm;
       try {
         console.log("[api/analyze] stage llmIssues");
-        llm = await llmIssues({ page, lighthouseScores: lh.scores });
+        llm = await llmIssues({ page, mobilePage, lighthouseScores: lh.scores });
       } catch (e) {
         const status = (e as { status?: number })?.status;
         const message = e instanceof Error ? e.message : "";

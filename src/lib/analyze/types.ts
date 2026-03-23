@@ -17,6 +17,10 @@ export type PageSignals = {
   hasViewportMeta: boolean;
   images: { src: string; alt: string | null }[];
   links: { href: string; text: string }[];
+  /** true when signals were collected with a mobile UA + 412×823 viewport */
+  isMobile?: boolean;
+  /** number of links/buttons whose bounding box is smaller than 48×48 px */
+  smallTapTargets?: number;
 };
 
 export type Issue = {

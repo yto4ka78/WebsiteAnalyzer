@@ -1,27 +1,58 @@
 import { chromium } from "playwright";
-import path from "path";
 import type { PageSignals } from "./types";
 
-export async function fetchPageSignals(url: string): Promise<PageSignals> {
-  // In serverless environments (Netlify), the default Playwright browser cache
-  // path (e.g. ~/.cache/ms-playwright) may not exist at runtime.
-  // We force Playwright to use a path inside the deployed bundle.
-  if (!process.env.PLAYWRIGHT_BROWSERS_PATH?.trim()) {
-    process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(
-      process.cwd(),
-      "node_modules",
-      ".cache",
-      "ms-playwright"
+/** Realistic UA — some hosts redirect "simple" bots in a loop or to broken rules. */
+const CHROME_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+const MOBILE_UA =
+  "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36";
+
+function isTooManyRedirects(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("ERR_TOO_MANY_REDIRECTS") ||
+    msg.includes("too many redirects") ||
+    msg.includes("net::ERR_TOO_MANY_REDIRECTS")
+  );
+}
+
+async function gotoWithFallback(page: import("playwright").Page, inputUrl: string): Promise<void> {
+  try {
+    await page.goto(inputUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    return;
+  } catch (e) {
+    if (!isTooManyRedirects(e)) throw e;
+    try {
+      const u = new URL(inputUrl);
+      if (u.protocol === "https:") {
+        u.protocol = "http:";
+        await page.goto(u.toString(), { waitUntil: "domcontentloaded", timeout: 45_000 });
+        return;
+      }
+    } catch {
+      /* ignore fallback failure */
+    }
+    throw new Error(
+      "The site returns an endless redirect loop (ERR_TOO_MANY_REDIRECTS). " +
+        "This is usually a server or CDN misconfiguration on that domain, not a bug in the analyzer. " +
+        "Try opening the URL in a normal browser; if it works there, the host may be blocking or mishandling automated clients."
     );
   }
+}
 
+export async function fetchPageSignals(
+  url: string,
+  { mobile = false }: { mobile?: boolean } = {}
+): Promise<PageSignals> {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({
-    userAgent: "Mozilla/5.0 (compatible; WebsiteAnalyzer/1.0)",
+    userAgent: mobile ? MOBILE_UA : CHROME_UA,
+    viewport: mobile ? { width: 412, height: 823 } : { width: 1350, height: 940 },
   });
 
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    await gotoWithFallback(page, url);
     const finalUrl = page.url();
 
     const title = await page.title().catch(() => null);
@@ -70,6 +101,19 @@ export async function fetchPageSignals(url: string): Promise<PageSignals> {
       )
       .catch(() => []);
 
+    // Mobile-only: count interactive elements smaller than the recommended 48×48 px touch target
+    let smallTapTargets: number | undefined;
+    if (mobile) {
+      smallTapTargets = await page
+        .$$eval("a, button, [role='button'], input, select, textarea", (els) =>
+          els.filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && (r.width < 48 || r.height < 48);
+          }).length
+        )
+        .catch(() => undefined);
+    }
+
     return {
       url,
       finalUrl,
@@ -82,6 +126,8 @@ export async function fetchPageSignals(url: string): Promise<PageSignals> {
       hasViewportMeta: viewport > 0,
       images,
       links,
+      isMobile: mobile || undefined,
+      smallTapTargets,
     };
   } finally {
     await page.close().catch(() => {});

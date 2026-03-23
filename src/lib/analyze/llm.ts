@@ -8,6 +8,7 @@ const client = apiKey ? new OpenAI({ apiKey }) : null;
 
 export async function llmIssues(args: {
   page: PageSignals;
+  mobilePage: PageSignals;
   lighthouseScores: {
     performance: number;
     seo: number;
@@ -25,7 +26,28 @@ export async function llmIssues(args: {
     );
   }
 
-  const { page, lighthouseScores } = args;
+  const { page, mobilePage, lighthouseScores } = args;
+
+  const mobileSection =
+    `--- MOBILE signals (412×823 viewport, Android UA — used for SEO evaluation) ---\n` +
+    `Title: ${mobilePage.title}\n` +
+    `Meta description: ${mobilePage.metaDescription}\n` +
+    `H1 count: ${mobilePage.h1.length}\n` +
+    `H1 samples: ${mobilePage.h1.slice(0, 3).join(" | ")}\n` +
+    `Canonical: ${mobilePage.canonical}\n` +
+    `Robots meta: ${mobilePage.robotsMeta}\n` +
+    `Viewport meta present: ${mobilePage.hasViewportMeta}\n` +
+    (mobilePage.smallTapTargets !== undefined
+      ? `Small tap targets (<48px): ${mobilePage.smallTapTargets}\n`
+      : "") +
+    `Images sample (src, alt): ${mobilePage.images
+      .slice(0, 8)
+      .map((i) => `${i.src} (alt=${i.alt ?? "null"})`)
+      .join(" ; ")}\n` +
+    `Links sample: ${mobilePage.links
+      .slice(0, 12)
+      .map((l) => `${l.text || "(no text)"} -> ${l.href}`)
+      .join(" ; ")}`;
 
   const prompt = {
     role: "user" as const,
@@ -40,7 +62,7 @@ export async function llmIssues(args: {
           `  "issues":[{"id":"...","title":"...","severity":"high|medium|low","evidence":"...","fix":"...","impact":"..."}],\n` +
           `  "recommendations":{"quickWins":["..."],"nextSteps":["..."]}\n` +
           `}\n\n` +
-          `Signals:\n` +
+          `--- DESKTOP signals (performance, accessibility, best-practices context) ---\n` +
           `URL: ${page.finalUrl}\n` +
           `Title: ${page.title}\n` +
           `Meta description: ${page.metaDescription}\n` +
@@ -49,7 +71,7 @@ export async function llmIssues(args: {
           `H2 count: ${page.h2.length}\n` +
           `Canonical: ${page.canonical}\n` +
           `Robots meta: ${page.robotsMeta}\n` +
-          `Viewport meta: ${page.hasViewportMeta}\n` +
+          `Viewport meta present: ${page.hasViewportMeta}\n` +
           `Images sample (src, alt): ${page.images
             .slice(0, 8)
             .map((i) => `${i.src} (alt=${i.alt ?? "null"})`)
@@ -57,8 +79,10 @@ export async function llmIssues(args: {
           `Links sample: ${page.links
             .slice(0, 12)
             .map((l) => `${l.text || "(no text)"} -> ${l.href}`)
-            .join(" ; ")}\n` +
-          `Lighthouse scores: ${JSON.stringify(lighthouseScores)}\n\n` +
+            .join(" ; ")}\n\n` +
+          `${mobileSection}\n\n` +
+          `Lighthouse scores (performance/accessibility/best-practices = desktop; seo = mobile): ${JSON.stringify(lighthouseScores)}\n\n` +
+          `IMPORTANT: All SEO issues must be evaluated from the MOBILE perspective (use mobile signals above).\n` +
           `Prioritize issues that affect: calls/leads, mobile UX, and Google visibility.\n` +
           `Be specific and actionable. No generic advice.`,
       },

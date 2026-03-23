@@ -1,7 +1,10 @@
 import OpenAI from "openai";
 import type { ContentPackInput, ContentPackReport } from "./types";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const apiKey = process.env.OPENAI_API_KEY?.trim();
+// Important: don't create OpenAI client at module-evaluation time.
+// Next build may import this module without having secrets configured yet.
+const client = apiKey ? new OpenAI({ apiKey }) : null;
 
 const SYSTEM_PROMPT = `You are an expert local SEO content strategist.
 Generate a complete content pack for a local business website.
@@ -44,6 +47,12 @@ Return exactly this JSON shape (no extra keys):
 export async function generateContentPack(
   input: ContentPackInput
 ): Promise<ContentPackReport> {
+  if (!client) {
+    throw new Error(
+      "OPENAI_API_KEY is not set on the server. Add it to Fly secrets (see .env.example)."
+    );
+  }
+
   const deliveryLine = input.has_delivery
     ? `- Delivery available: yes`
     : `- Delivery available: no`;

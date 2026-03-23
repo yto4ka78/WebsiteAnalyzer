@@ -3,7 +3,10 @@ import type { MapsBusinessData, MapsLLMReport } from "./types";
 import type { ThemeCount } from "./themes";
 import { computeAverageRating, computeOwnerReplyCount } from "./themes";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const apiKey = process.env.OPENAI_API_KEY?.trim();
+// Important: don't create OpenAI client at module-evaluation time.
+// Next build may import this module without secrets configured yet.
+const client = apiKey ? new OpenAI({ apiKey }) : null;
 
 const SYSTEM_PROMPT = `You are a senior local SEO and reputation management consultant.
 Your task is to analyze Google Maps business data and produce a professional, actionable reputation report.
@@ -81,6 +84,12 @@ export async function mapsLlmReport(
   business: MapsBusinessData,
   themes: ThemeCount[]
 ): Promise<MapsLLMReport> {
+  if (!client) {
+    throw new Error(
+      "OPENAI_API_KEY is not set on the server. Add it to Fly secrets (see .env.example)."
+    );
+  }
+
   const avgRating = computeAverageRating(business.reviews);
   const ownerReplies = computeOwnerReplyCount(business.reviews);
 
